@@ -92,6 +92,10 @@ button:disabled{opacity:.4;pointer-events:none}
 .bigstate.conn{background:var(--pri-lt);color:var(--pri)}
 .bigstate.ready{background:var(--ok-bg);color:#15803d;border:1px solid var(--ok-bd)}
 .bigstate.rec{background:#fff7ed;color:#b45309;border:1px solid #fed7aa}
+.stat{display:flex;justify-content:space-between;align-items:center;background:#fcfdff;border:1px solid var(--line);
+  border-radius:10px;padding:8px 13px;margin-top:8px;font-size:12.5px}
+.stat span{color:var(--muted);font-weight:600}
+.stat b{font-variant-numeric:tabular-nums;color:var(--tx2)}
 </style>
 </head>
 <body>
@@ -153,9 +157,10 @@ button:disabled{opacity:.4;pointer-events:none}
   <div id="sessList"><div class="hint" style="margin-top:0">暂无会话。每次点「结束并保存」生成一条。</div></div>
   <div class="row" style="margin-top:13px">
     <button id="btnExport" class="btnPri" disabled>导出全部(CSV)</button>
+    <button id="btnCopy" disabled>复制数据</button>
   </div>
   <div class="okbar" id="expOk"></div>
-  <div class="hint">建议每完成一名被试就导出一次并发走(微信文件传输助手/AirDrop 到 Mac)。导出不会清数据,「清空全部」才会。</div>
+  <div class="hint">建议每完成一名被试就导出一次并发走。iOS 点导出会弹出分享面板,选「存储到文件」或 AirDrop 到 Mac。</div>
 </div>
 
 <div class="card">
@@ -391,8 +396,8 @@ $('btnStop').addEventListener('click',function(){
 function renderSessions(){
   var host=$('sessList');
   if(!sessions.length){host.innerHTML='<div class="hint" style="margin-top:0">暂无会话。每次点「结束并保存」生成一条。</div>';
-    $('btnExport').disabled=true;return}
-  $('btnExport').disabled=false;
+    $('btnExport').disabled=true;$('btnCopy').disabled=true;return}
+  $('btnExport').disabled=false;$('btnCopy').disabled=false;
   var h='';
   sessions.forEach(function(s,idx){
     var dur=s.end&&s.start?((s.end-s.start)/1000).toFixed(0):'-';
@@ -450,16 +455,42 @@ $('btnExport').addEventListener('click',function(){
   var csv=buildCSV();
   var name='骑行数据_'+(sessions[0].sid||'')+'_'+sessions.length+'段_'+
     new Date().toISOString().slice(0,10)+'.csv';
+  var showOk=function(msg){$('expOk').textContent=msg;$('expOk').classList.add('show');log('导出 '+sessions.length+' 会话: '+name)};
+  var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  /* 首选:系统分享面板(iOS 最稳,AirDrop/存文件/微信一步到位) */
+  if(navigator.canShare&&navigator.canShare({files:[new File([''],name,{type:'text/csv'})]})&&navigator.share){
+    var file=new File([blob],name,{type:'text/csv'});
+    navigator.share({files:[file],title:name}).then(function(){
+      showOk('✔ 已调出分享面板。请选择「存储到文件」或 AirDrop 发送到 Mac。');
+    }).catch(function(e){
+      if(e&&e.name==='AbortError'){log('取消了分享');return}
+      fallbackDownload(blob,name,showOk);
+    });
+    return;
+  }
+  fallbackDownload(blob,name,showOk);
+});
+function fallbackDownload(blob,name,showOk){
   var a=document.createElement('a');
   a.download=name;
-  try{var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
-    a.href=URL.createObjectURL(blob);document.body.appendChild(a);a.click();
-    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},2000);
-  }catch(e){a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);document.body.appendChild(a);a.click();a.remove()}
-  $('expOk').textContent='✔ 已导出 '+sessions.length+' 个会话 → '+name+'。请尽快发送到 Mac 备份。';
-  $('expOk').classList.add('show');
-  log('导出 '+sessions.length+' 会话: '+name);
+  a.href=URL.createObjectURL(blob);document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},2000);
+  showOk('✔ 已触发下载: '+name+'。若找不到文件,请用下方「复制数据」手动保存。');
+}
+$('btnCopy').addEventListener('click',function(){
+  if(!sessions.length)return;
+  var csv=buildCSV();
+  var done=function(){$('expOk').textContent='✔ 已复制全部数据到剪贴板。去微信/备忘录粘贴发送。';$('expOk').classList.add('show');log('数据已复制到剪贴板')};
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(csv).then(done,function(){legacyCopy(csv,done)});
+  }else legacyCopy(csv,done);
 });
+function legacyCopy(text,done){
+  var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand('copy');done()}catch(e){warn('复制失败。请截图会话列表并联系研究支持。',true)}
+  ta.remove();
+}
 /* ================= 清空 ================= */
 $('btnReset').addEventListener('click',function(){
   if(!confirm('清空全部 '+sessions.length+' 个会话?(导出文件不受影响,本机记录将删除)'))return;
