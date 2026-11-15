@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>变速调研 · 骑行数据采集</title>
+<style>
+:root{
+  --pri:#2563eb;--pri-dk:#1d4ed8;--pri-lt:#eff6ff;
+  --bg:#eef2f7;--card:#fff;--line:#e3e8ef;--line2:#f1f5f9;
+  --tx:#0f172a;--tx2:#475569;--muted:#94a3b8;
+  --ok:#16a34a;--ok-bg:#f0fdf4;--ok-bd:#bbf7d0;
+  --warn:#b45309;--warn-bg:#fffbeb;--warn-bd:#fde68a;
+  --bad:#dc2626;--bad-bg:#fef2f2;--bad-bd:#fecaca;
+  --r:14px;--sh:0 1px 2px rgba(15,23,42,.04),0 6px 18px rgba(15,23,42,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--tx);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  max-width:640px;margin:0 auto;padding:0 14px calc(24px + env(safe-area-inset-bottom))}
+button{font-family:inherit}
+.hero{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);margin:0 -14px;padding:11px 18px;display:flex;align-items:center;gap:10px}
+.hero h1{font-size:15.5px;font-weight:800;letter-spacing:.2px}
+.hero .dot{width:10px;height:10px;border-radius:50%;background:#c3ccdb;flex:none;transition:.2s}
+.hero .dot.on{background:var(--ok);box-shadow:0 0 0 4px rgba(22,163,74,.15)}
+.hero .dot.rec{background:#f59e0b;animation:pulse 1.1s infinite alternate;box-shadow:0 0 0 4px rgba(245,158,11,.18)}
+@keyframes pulse{from{opacity:.55}to{opacity:1}}
+.hero .sub{margin-left:auto;font-size:11.5px;color:var(--muted);font-weight:600;white-space:nowrap}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);padding:18px;margin-top:14px}
+.stephead{display:flex;align-items:center;gap:9px;margin-bottom:13px;padding-bottom:9px;border-bottom:1px solid var(--line2)}
+.stepno{width:22px;height:22px;border-radius:7px;flex:none;background:var(--pri);color:#fff;font-size:12.5px;font-weight:800;
+  display:flex;align-items:center;justify-content:center}
+.stept{font-size:14.5px;font-weight:800}
+.stept small{color:var(--muted);font-weight:500;margin-left:4px;font-size:11.5px}
+.row{display:flex;gap:9px}
+.row>*{flex:1}
+.field{margin-bottom:13px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:7px}
+input[type=text]{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font-size:15px;
+  background:#fcfdff;font-family:inherit;color:var(--tx);outline:none;transition:.15s}
+input[type=text]:focus{border-color:var(--pri);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.11)}
+button{border:1px solid var(--line);background:#fff;color:var(--tx2);border-radius:11px;padding:13px 16px;
+  font-size:14.5px;font-weight:700;width:100%;cursor:pointer;transition:.15s;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+button:hover{border-color:#cbd5e1}
+button:active{transform:scale(.98)}
+button:disabled{opacity:.4;pointer-events:none}
+.btnPri{background:var(--pri);border-color:var(--pri);color:#fff;box-shadow:0 4px 14px rgba(37,99,235,.28)}
+.btnPri:hover{background:var(--pri-dk)}
+.btnStop{background:var(--bad);border-color:var(--bad);color:#fff;box-shadow:0 4px 14px rgba(220,38,38,.22)}
+.btnGhost{background:#fff;color:var(--muted);border:1px dashed #cbd5e1;box-shadow:none;font-weight:600;font-size:12.5px;padding:11px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{padding:11px 10px;font-size:13.5px;flex:1 1 0;min-width:64px}
+.seg button.on{background:var(--pri);border-color:var(--pri);color:#fff;box-shadow:0 3px 10px rgba(37,99,235,.25)}
+/* 实时读数 */
+.live{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:13px}
+.lbox{background:#fcfdff;border:1px solid var(--line);border-radius:11px;padding:12px 6px;text-align:center}
+.lbox .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+.lbox .v.wait{color:var(--muted);font-size:15px;padding:6px 0}
+.lbox .l{font-size:10.5px;color:var(--muted);margin-top:3px}
+.lbox.rpm .v{color:var(--pri)}
+.lbox.spd .v{color:#0891b2}
+.lbox.cnt .v{color:var(--ok)}
+.log{font-size:10.5px;color:var(--muted);max-height:110px;overflow-y:auto;line-height:1.65;margin-top:10px;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 14px);mask-image:linear-gradient(to bottom,transparent 0,#000 14px)}
+/* 会话列表 */
+.sess{border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:9px;background:#fcfdff}
+.sess:last-child{margin-bottom:0}
+.sess .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sess .who{font-weight:800;font-size:14.5px}
+.sess .tags{display:flex;gap:5px;flex-wrap:wrap}
+.sess .tg{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:var(--tx2)}
+.sess .tg.car{background:var(--pri-lt);color:var(--pri)}
+.sess .tg.lap{background:var(--ok-bg);color:#15803d;border:1px solid var(--ok-bd)}
+.sess .meta{font-size:11.5px;color:var(--muted);margin-top:5px;display:flex;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.sess .ops{display:flex;gap:8px;margin-top:9px}
+.sess .ops button{padding:8px 12px;font-size:12px;border-radius:9px}
+.warn{background:var(--warn-bg);border:1px solid var(--warn-bd);color:#92400e;border-radius:10px;
+  padding:10px 14px;font-size:12.5px;line-height:1.65;display:none;margin-top:14px}
+.warn.show{display:block}
+.bad{background:var(--bad-bg);border-color:var(--bad-bd);color:#b91c1c}
+.hint{font-size:11.5px;color:var(--muted);line-height:1.65;margin-top:9px}
+.okbar{display:none;margin-top:14px;padding:10px 14px;border-radius:10px;background:var(--ok-bg);
+  border:1px solid var(--ok-bd);color:#15803d;font-weight:800;font-size:13.5px}
+.okbar.show{display:block}
+.bigstate{margin-top:13px;padding:12px;border-radius:11px;font-size:13.5px;font-weight:700;text-align:center;line-height:1.6}
+.bigstate.idle{background:#f1f5f9;color:var(--tx2)}
+.bigstate.conn{background:var(--pri-lt);color:var(--pri)}
+.bigstate.ready{background:var(--ok-bg);color:#15803d;border:1px solid var(--ok-bd)}
+.bigstate.rec{background:#fff7ed;color:#b45309;border:1px solid #fed7aa}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <span class="dot" id="hdot"></span>
+  <h1>骑行数据采集</h1>
+  <span class="sub" id="hsub">未连接</span>
+</div>
+
+<div id="warnBox" class="warn"></div>
+
+<!-- 1 本车绑定 -->
+<div class="card">
+  <div class="stephead"><div class="stepno">1</div><div class="stept">传感器绑定<small>每台手机一次,之后自动回连</small></div></div>
+  <div class="bigstate idle" id="bleState">未绑定传感器</div>
+  <div class="row" style="margin-top:12px">
+    <button id="btnBind" class="btnPri">绑定踏频传感器</button>
+    <button id="btnTest">转动测试</button>
+  </div>
+  <div class="hint">点「绑定」→ 在弹出列表中选本车的传感器（CADC 开头）→ 转动踏板,下方圈数应增加。绑定关系存本机,换被试不用重新绑。</div>
+</div>
+
+<!-- 2 本次骑行打标 -->
+<div class="card">
+  <div class="stephead"><div class="stepno">2</div><div class="stept">本次骑行打标<small>与问卷一致的编号</small></div></div>
+  <div class="row">
+    <div class="field"><label>被试编号 *</label><input type="text" id="inSid" placeholder="如 S013" autocomplete="off"></div>
+    <div class="field"><label>访问员</label><input type="text" id="inIv" placeholder="姓名" autocomplete="off"></div>
+  </div>
+  <div class="field"><label>车辆 *</label><div class="seg" id="carSeg"></div></div>
+  <div class="field"><label>圈次 *</label><div class="seg" id="lapSeg">
+    <button data-v="explore">探索圈</button><button data-v="formal">正式圈</button>
+  </div></div>
+  <div class="hint">编号必须与问卷系统里一致——这是两份数据关联的唯一钥匙。顶部会常显当前编号供核对。</div>
+</div>
+
+<!-- 3 采集 -->
+<div class="card">
+  <div class="stephead"><div class="stepno">3</div><div class="stept">采集<small>开始后同时记录 踏频+GPS</small></div></div>
+  <div class="row">
+    <button id="btnStart" class="btnPri" disabled>开始采集</button>
+    <button id="btnStop" class="btnStop" disabled>结束并保存</button>
+  </div>
+  <div class="live">
+    <div class="lbox rpm"><div class="v" id="vRpm">--</div><div class="l">踏频 RPM</div></div>
+    <div class="lbox spd"><div class="v" id="vSpd">--</div><div class="l">GPS 速度 km/h</div></div>
+    <div class="lbox cnt"><div class="v" id="vCnt">0</div><div class="l">踏频事件数</div></div>
+  </div>
+  <div class="stat" style="margin-top:11px"><span>GPS 点数</span><b id="stGps">0</b></div>
+  <div class="stat"><span>已录时长</span><b id="stDur">0.0 s</b></div>
+  <div class="stat"><span>蓝牙状态</span><b id="stBle">--</b></div>
+  <div class="hint">采集期间保持屏幕亮着、页面在前台。中途停车/等红灯不用管,继续骑即可;结束点「结束并保存」。</div>
+</div>
+
+<!-- 4 会话列表与导出 -->
+<div class="card">
+  <div class="stephead"><div class="stepno">4</div><div class="stept">已采会话<small>随时检查,随时导出</small></div></div>
+  <div id="sessList"><div class="hint" style="margin-top:0">暂无会话。每次点「结束并保存」生成一条。</div></div>
+  <div class="row" style="margin-top:13px">
+    <button id="btnExport" class="btnPri" disabled>导出全部(CSV)</button>
+  </div>
+  <div class="okbar" id="expOk"></div>
+  <div class="hint">建议每完成一名被试就导出一次并发走(微信文件传输助手/AirDrop 到 Mac)。导出不会清数据,「清空全部」才会。</div>
+</div>
+
+<div class="card">
+  <button id="btnReset" class="btnGhost">清空全部会话(新的一天/换车组)</button>
+</div>
+
+<div class="log" id="log"></div>
+
+<script>
+"use strict";
+/* ================= 配置 ================= */
+var CARS=[['A','绿A'],['B','绿B'],['C','绿C'],['BL','小蓝'],['Y','小黄']];
+var CSC_SVC='cycling_speed_and_cadence';      // 0x1816
+var CSC_MEAS=0x2A5B;
+var STORE_KEY='ride_collect_v1';               // 会话存储
+var BIND_KEY='ride_bind_v1';                   // 传感器绑定
+
+var $=function(id){return document.getElementById(id)};
+function log(msg,cls){var el=$('log');el.textContent=new Date().toTimeString().slice(0,8)+'  '+msg+'\n'+el.textContent}
+function warn(html,isBad){var el=$('warnBox');if(html){el.innerHTML=html;el.classList.add('show');el.classList.toggle('bad',!!isBad)}else{el.classList.remove('show','bad')}}
+
+/* ================= 状态 ================= */
+var bindInfo=null;        // {id,name} 已绑定的传感器
+var device=null,gatt=null,measChar=null;
+var bleConnected=false,notifyOn=false;
+var recording=false;
+var sess=null;            // 当前进行中的会话对象
+var sessions=[];          // 已完成会话
+var lastCrank={rev:-1,ts:-1};   // 上一事件(差分)
+var rpmLast=-1, rpmT=0;
+var gpsWatchId=null;
+var wakeLock=null;
+
+/* ================= 持久化 ================= */
+function loadStore(){try{var s=localStorage.getItem(STORE_KEY);if(s)sessions=JSON.parse(s)||[]}catch(e){}}
+function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(sessions))}catch(e){warn('本机存储空间不足!请尽快导出并清空。',true)}}
+function loadBind(){try{var s=localStorage.getItem(BIND_KEY);if(s)bindInfo=JSON.parse(s)}catch(e){}}
+function saveBind(){try{localStorage.setItem(BIND_KEY,JSON.stringify(bindInfo))}catch(e){}}
+
+/* ================= 车辆/圈次选择 ================= */
+var curCar='',curLap='';
+(function(){var h='';CARS.forEach(function(c){h+='<button data-v="'+c[0]+'">'+c[1]+'</button>'});$('carSeg').innerHTML=h})();
+function segBind(id,cb){var el=$(id);el.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){
+  el.querySelectorAll('button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');cb(b.getAttribute('data-v'))})})}
+segBind('carSeg',function(v){curCar=v;validateStart()});
+segBind('lapSeg',function(v){curLap=v;validateStart()});
+$('inSid').addEventListener('input',validateStart);
+$('inIv').addEventListener('input',validateStart);
+
+function validateStart(){
+  $('btnStart').disabled=!(recording===false&&bindInfo&&$('inSid').value.trim()&&curCar&&curLap);
+  var s=$('inSid').value.trim();
+  $('hsub').textContent=recording?('采集中 · '+(s||'?')+' · '+carName(curCar)):
+    (bindInfo?(s?(s+' · '+carName(curCar)):'已绑定 '+bindInfo.name):'未绑定');
+}
+function carName(v){for(var i=0;i<CARS.length;i++)if(CARS[i][0]===v)return CARS[i][1];return v||'-'}
+
+/* ================= BLE ================= */
+function setCscSupport(){
+  if(!navigator.bluetooth){warn('此浏览器不支持 Web Bluetooth。<br>· 安卓:用 Chrome / Edge 打开本页(需 HTTPS)<br>· iPhone/iPad:装 <b>Bluefy</b> 浏览器打开本页',true);return false}
+  if(!window.isSecureContext){warn('当前不是 HTTPS 页面,浏览器会禁用蓝牙。<br>请通过 https:// 网址打开本页(不要双击本地文件)。',true);return false}
+  return true;
+}
+$('btnBind').addEventListener('click',function(){
+  if(!setCscSupport())return;
+  navigator.bluetooth.requestDevice({filters:[{services:[CSC_SVC]}],optionalServices:[CSC_SVC]})
+  .then(function(d){
+    device=d;
+    bindInfo={id:d.id,name:(d.name||'CADC 传感器')};
+    saveBind();
+    log('已选择传感器: '+bindInfo.name);
+    $('bleState').textContent='已绑定: '+bindInfo.name+' · 连接中…';
+    $('bleState').className='bigstate conn';
+    return connectGatt();
+  })
+  .then(function(){validateStart()})
+  .catch(function(e){
+    if(e.name==='NotFoundError'){log('取消了绑定选择');return}
+    warn('绑定失败: '+(e.message||e.name),true);log('绑定失败: '+e.message);
+  });
+});
+function connectGatt(){
+  if(!device)return Promise.reject(new Error('未选择设备'));
+  return device.gatt.connect()
+  .then(function(g){
+    gatt=g;bleConnected=true;
+    $('stBle').textContent='已连接';updateDot();
+    device.addEventListener('gattserverdisconnected',onDisconnect);
+    return g.getPrimaryService(CSC_SVC);
+  })
+  .then(function(s){return s.getCharacteristic(CSC_MEAS)})
+  .then(function(c){
+    measChar=c;
+    return c.startNotifications().then(function(){
+      notifyOn=true;c.addEventListener('characteristicvaluechanged',onCsc);log('踏频数据订阅成功');
+      $('bleState').innerHTML='已绑定: '+(bindInfo?bindInfo.name:'')+' · <b style="color:#16a34a">数据接收中</b>';
+      $('bleState').className='bigstate ready';
+    });
+  })
+  .catch(function(e){
+    bleConnected=false;$('stBle').textContent='连接失败';updateDot();
+    log('GATT 连接失败: '+(e.message||e.name));
+    throw e;
+  });
+}
+function onDisconnect(){
+  bleConnected=false;notifyOn=false;updateDot();$('stBle').textContent='已断开';
+  $('bleState').innerHTML='已绑定: '+(bindInfo?bindInfo.name:'')+' · <b style="color:#dc2626">已断开,自动重连中…</b>';
+  $('bleState').className='bigstate idle';
+  if(recording&&sess){sess.events.push({t:Date.now(),type:'ble_reconnect'})}   // 断点标记
+  log('蓝牙断开,尝试自动重连…');
+  setTimeout(function(){reconnect()},1500);
+}
+function reconnect(){
+  if(!device||bleConnected)return;
+  connectGatt().then(function(){log('重连成功');if(recording&&sess)sess.events.push({t:Date.now(),type:'ble_resumed'})})
+  .catch(function(){setTimeout(reconnect,3000)});
+}
+/* CSC Measurement 解析: flags1 + [wheel:4+2] + [crank:2+2] */
+function onCsc(e){
+  var dv=e.target.value;
+  if(dv.byteLength<1)return;
+  var flags=dv.getUint8(0),off=1;
+  if(flags&0x01){ // wheel revolution data present (1 uint32 + 1 uint16)
+    var wRev=dv.getUint32(off,true);off+=4;
+    var wTs=dv.getUint16(off,true);off+=2;
+    if(recording&&sess)sess.events.push({t:Date.now(),type:'wheel',rev:wRev,sts:wTs});
+  }
+  if(flags&0x02&&dv.byteLength>=off+4){ // crank revolution data present
+    var cRev=dv.getUint16(off,true);off+=2;
+    var cTs=dv.getUint16(off,true);
+    if(recording&&sess)sess.events.push({t:Date.now(),type:'crank',rev:cRev,sts:cTs});
+    /* 实时 RPM 显示(差分,处理 65536 回绕) */
+    if(lastCrank.rev>=0){
+      var dRev=(cRev-lastCrank.rev+65536)%65536;
+      var dTs=(cTs-lastCrank.ts+65536)%65536;
+      if(dRev>0&&dRev<300&&dTs>0){rpmLast=Math.round(dRev/dTs*1024*60);rpmT=Date.now();
+        if(recording&&sess&&sess.rpmMax<rpmLast)sess.rpmMax=rpmLast}
+    }
+    lastCrank={rev:cRev,ts:cTs};
+    if(recording&&sess){sess.crankCount++;$('vCnt').textContent=sess.crankCount}
+  }
+}
+$('btnTest').addEventListener('click',function(){
+  if(!bindInfo){warn('先点「绑定踏频传感器」。');return}
+  if(!bleConnected&&device){reconnect()}
+  if(!notifyOn){warn('传感器未连接/未订阅,先重新绑定或等自动重连。',true);return}
+  var before=sess?sess.crankCount:0;
+  warn('现在<b>转动踏板 5 秒以上</b>——上方「踏频 RPM」应有数字跳动、圈数递增。正常就说明本车绑定成功。');
+  log('转动测试开始(记录 10 秒)');
+  var t0=Date.now(),maxR=0,n=0;
+  var iv=setInterval(function(){
+    if(rpmLast>0)maxR=Math.max(maxR,rpmLast);
+    n++;
+    if(Date.now()-t0>10000){clearInterval(iv);
+      if(maxR>0){warn('测试通过:最高踏频 '+maxR+' RPM,链路正常。');log('转动测试 PASS max='+maxR)}
+      else{warn('10 秒内没收到踏频数据。检查:传感器电池是否装好(装电池红灯闪=踏频模式)/曲柄是否转动/距离是否过远。',true);log('转动测试 FAIL')}
+    }
+  },200);
+});
+
+/* ================= GPS ================= */
+function gpsStart(){
+  if(!navigator.geolocation){log('设备不支持 GPS,速度通道缺失');return}
+  var opts={enableHighAccuracy:true,maximumAge:500,timeout:8000};
+  gpsWatchId=navigator.geolocation.watchPosition(function(p){
+    var c=p.coords;
+    if(recording&&sess){
+      sess.gps.push({t:Date.now(),lat:+c.latitude.toFixed(7),lon:+c.longitude.toFixed(7),
+        acc:Math.round(c.accuracy||0),spd:(c.speed!=null?+c.speed.toFixed(2):'')});
+      $('stGps').textContent=sess.gps.length;
+      if(c.speed!=null&&c.speed>=0)$('vSpd').textContent=(c.speed*3.6).toFixed(1);
+      if(recording&&sess&&c.speed!=null&&sess.spdMax<c.speed*3.6)sess.spdMax=c.speed*3.6;
+    }
+  },function(err){
+    if(err.code===1)warn('GPS 权限被拒绝。到系统设置里给浏览器开位置权限,否则速度通道不可用。',true);
+    log('GPS 错误: '+err.message);
+  },opts);
+}
+function gpsStop(){if(gpsWatchId!=null){navigator.geolocation.clearWatch(gpsWatchId);gpsWatchId=null}}
+
+/* ================= 采集开始/结束 ================= */
+$('btnStart').addEventListener('click',function(){
+  var sid=$('inSid').value.trim();
+  if(!sid||!curCar||!curLap){validateStart();return}
+  if(!setCscSupport())return;
+  if(!bindInfo){warn('先绑定传感器再开始。',true);return}
+  /* 蓝牙未连则先连 */
+  var pre=(bleConnected&&notifyOn)?Promise.resolve():
+    (device?connectGatt():Promise.reject(new Error('传感器未绑定')));
+  pre.then(function(){
+    sess={
+      sid:sid,iv:$('inIv').value.trim(),car:curCar,lap:curLap,
+      deviceName:bindInfo.name,deviceId:bindInfo.id,
+      start:Date.now(),end:0,
+      events:[],gps:[],crankCount:0,rpmMax:0,spdMax:0
+    };
+    lastCrank={rev:-1,ts:-1};rpmLast=-1;
+    recording=true;
+    $('btnStart').disabled=true;$('btnStop').disabled=false;
+    $('vRpm').textContent='--';$('vSpd').textContent='--';$('vCnt').textContent='0';$('stGps').textContent='0';
+    warn(null);
+    gpsStart();requestWake();
+    $('hsub').textContent='采集中 · '+sid+' · '+carName(curCar);
+    updateDot();
+    log('开始采集: '+sid+' '+carName(curCar)+' '+(curLap==='explore'?'探索圈':'正式圈'));
+    /* 实时 RPM 刷新 */
+    rpmTimer=setInterval(function(){
+      if(rpmLast>0&&Date.now()-rpmT<3000)$('vRpm').textContent=rpmLast;
+      else $('vRpm').textContent='--';
+      if(recording&&sess)$('stDur').textContent=((Date.now()-sess.start)/1000).toFixed(1)+' s';
+    },500);
+  })
+  .catch(function(e){warn('无法开始: '+(e.message||e),true)});
+});
+var rpmTimer=null;
+$('btnStop').addEventListener('click',function(){
+  if(!recording||!sess)return;
+  recording=false;sess.end=Date.now();
+  if(rpmTimer){clearInterval(rpmTimer);rpmTimer=null}
+  gpsStop();releaseWake();
+  sessions.push(sess);
+  saveStore();
+  log('已保存会话: '+sess.sid+' '+carName(sess.car)+' 事件'+sess.crankCount+' GPS'+sess.gps.length+' 用时'+((sess.end-sess.start)/1000).toFixed(0)+'s');
+  sess=null;
+  $('btnStop').disabled=true;
+  $('vRpm').textContent='--';$('vSpd').textContent='--';
+  $('hsub').textContent=(bindInfo?'已绑定 '+bindInfo.name:'未绑定');
+  updateDot();renderSessions();validateStart();
+});
+
+/* ================= 会话列表 ================= */
+function renderSessions(){
+  var host=$('sessList');
+  if(!sessions.length){host.innerHTML='<div class="hint" style="margin-top:0">暂无会话。每次点「结束并保存」生成一条。</div>';
+    $('btnExport').disabled=true;return}
+  $('btnExport').disabled=false;
+  var h='';
+  sessions.forEach(function(s,idx){
+    var dur=s.end&&s.start?((s.end-s.start)/1000).toFixed(0):'-';
+    var warnTxt=(s.crankCount<20)?'<span style="color:#b45309">踏频事件偏少,建议重采</span>':
+      (s.gps.length<30?'<span style="color:#b45309">GPS 点偏少,检查定位权限</span>':'数据量正常');
+    h+='<div class="sess"><div class="top"><span class="who">'+esc(s.sid)+'</span>'+
+      '<span class="tags"><span class="tg car">'+carName(s.car)+'</span>'+
+      '<span class="tg lap">'+(s.lap==='explore'?'探索圈':'正式圈')+'</span>'+
+      (s.iv?'<span class="tg">'+esc(s.iv)+'</span>':'')+'</span></div>'+
+      '<div class="meta"><span>'+fmtShort(s.start)+'</span><span>时长 '+dur+'s</span>'+
+      '<span>踏频 '+s.crankCount+' 事件</span><span>峰值RPM '+s.rpmMax+'</span><span>GPS '+s.gps.length+' 点</span>'+
+      '<span>峰值 '+s.spdMax.toFixed(1)+'km/h</span></div>'+
+      '<div class="meta">'+warnTxt+'</div>'+
+      '<div class="ops"><button data-op="del" data-i="'+idx+'">删除</button></div></div>';
+  });
+  host.innerHTML=h;
+  host.querySelectorAll('button[data-op=del]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var i=+b.getAttribute('data-i');
+      if(confirm('删除会话 '+sessions[i].sid+' '+carName(sessions[i].car)+'?不可恢复。')){
+        sessions.splice(i,1);saveStore();renderSessions();log('已删除 1 条会话')}
+    });
+  });
+}
+/* ================= 导出 ================= */
+function csvCell(v){var s=String(v==null?'':v);if(/[",\n\r]/.test(s))s='"'+s.replace(/"/g,'""')+'"';return s}
+function fmtShort(ms){var d=new Date(ms);function p2(n){return(n<10?'0':'')+n}
+  return p2(d.getMonth()+1)+'-'+p2(d.getDate())+' '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())}
+function fmtFull(ms){var d=new Date(ms);function p2(n){return(n<10?'0':'')+n}
+  return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+' '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())+'.'+('00'+d.getMilliseconds()).slice(-3)}
+function buildCSV(){
+  var L=[];
+  L.push('# ride_collect v1');
+  L.push('# exported='+fmtFull(Date.now()));
+  L.push('# bind_device='+(bindInfo?bindInfo.name:''));
+  L.push('# ua='+navigator.userAgent.replace(/,/g,';'));
+  sessions.forEach(function(s,si){
+    L.push('');
+    L.push('# ===== session '+(si+1)+' sid='+s.sid+' car='+s.car+'('+carName(s.car)+') lap='+s.lap+
+      ' iv='+s.iv+' start_ms='+s.start+' end_ms='+s.end+' crank_events='+s.crankCount+
+      ' rpm_max='+s.rpmMax+' spd_max_kmh='+s.spdMax.toFixed(2)+' gps_points='+s.gps.length+' =====');
+    L.push('t_unix_ms,t_local,kind,rev,sts,lat,lon,acc_m,gps_spd_ms');
+    /* 合并事件流与 GPS 流,按时间排序输出(稀疏格式:每行只填本通道字段) */
+    var rows=[];
+    s.events.forEach(function(ev){rows.push([ev.t,fmtFull(ev.t),ev.type,
+      (ev.rev!=null?ev.rev:''),(ev.sts!=null?ev.sts:''),'','','',''])});
+    s.gps.forEach(function(g){rows.push([g.t,fmtFull(g.t),'gps','','',g.lat,g.lon,g.acc,g.spd])});
+    rows.sort(function(a,b){return a[0]-b[0]});
+    rows.forEach(function(r){L.push(r.map(csvCell).join(','))});
+  });
+  return L.join('\n');
+}
+$('btnExport').addEventListener('click',function(){
+  if(!sessions.length)return;
+  var csv=buildCSV();
+  var name='骑行数据_'+(sessions[0].sid||'')+'_'+sessions.length+'段_'+
+    new Date().toISOString().slice(0,10)+'.csv';
+  var a=document.createElement('a');
+  a.download=name;
+  try{var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+    a.href=URL.createObjectURL(blob);document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},2000);
+  }catch(e){a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);document.body.appendChild(a);a.click();a.remove()}
+  $('expOk').textContent='✔ 已导出 '+sessions.length+' 个会话 → '+name+'。请尽快发送到 Mac 备份。';
+  $('expOk').classList.add('show');
+  log('导出 '+sessions.length+' 会话: '+name);
+});
+/* ================= 清空 ================= */
+$('btnReset').addEventListener('click',function(){
+  if(!confirm('清空全部 '+sessions.length+' 个会话?(导出文件不受影响,本机记录将删除)'))return;
+  if(!confirm('再次确认:请先确保已导出!确定清空?'))return;
+  sessions=[];saveStore();renderSessions();log('已清空全部会话');
+});
+/* ================= 屏幕常亮 ================= */
+function requestWake(){
+  if('wakeLock'in navigator){navigator.wakeLock.request('screen').then(function(w){
+    wakeLock=w;log('屏幕常亮已启用')}).catch(function(){log('屏幕常亮失败,请手动调长自动锁定')})}
+}
+function releaseWake(){if(wakeLock){wakeLock.release();wakeLock=null}}
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'){
+    if(recording){requestWake();if(device&&!bleConnected)reconnect()}
+  }
+});
+/* ================= 杂项 ================= */
+function updateDot(){var d=$('hdot');d.className='dot'+(recording?' rec':(bleConnected?' on':''))}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+/* 启动 */
+loadStore();loadBind();
+renderSessions();
+if(bindInfo){
+  $('bleState').textContent='已绑定: '+bindInfo.name+' · 点「转动测试」验证,或直接开始采集(将自动连接)';
+  $('bleState').className='bigstate conn';
+  log('本机已绑定过传感器 '+bindInfo.name+'(开始采集时自动回连)');
+}else{
+  setCscSupport();
+}
+validateStart();
+window.addEventListener('beforeunload',function(e){
+  if(recording){e.preventDefault();e.returnValue='采集进行中,离开将丢失当前段数据!'}
+});
+</script>
+</body>
+</html>
