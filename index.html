@@ -56,6 +56,9 @@ button:disabled{opacity:.4;pointer-events:none}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 .seg button{padding:11px 10px;font-size:13.5px;flex:1 1 0;min-width:64px}
 .seg button.on{background:var(--pri);border-color:var(--pri);color:#fff;box-shadow:0 3px 10px rgba(37,99,235,.25)}
+/* 十辆车:5 列 2 行 */
+.seg.cars{display:grid;grid-template-columns:repeat(5,1fr)}
+.seg.cars button{flex:none;width:100%;min-width:0;padding:11px 0;font-size:13px}
 /* 实时读数 */
 .live{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:13px}
 .lbox{background:#fcfdff;border:1px solid var(--line);border-radius:11px;padding:12px 6px;text-align:center}
@@ -96,6 +99,27 @@ button:disabled{opacity:.4;pointer-events:none}
   border-radius:10px;padding:8px 13px;margin-top:8px;font-size:12.5px}
 .stat span{color:var(--muted);font-weight:600}
 .stat b{font-variant-numeric:tabular-nums;color:var(--tx2)}
+/* 多传感器列表:5列×2行网格,每格三行(车名/设备/解绑) */
+.bindlist{margin-top:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+.bindcard{border:1px solid var(--line);border-radius:11px;padding:9px 5px;background:#fcfdff;
+  display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;min-width:0}
+.bindcard.cur{border-color:var(--pri);background:var(--pri-lt)}
+.bindcard .carn{font-weight:800;font-size:13px}
+.bindcard .dev{font-size:10px;color:var(--tx2);width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bindcard .st{font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:#f1f5f9;color:var(--muted)}
+.bindcard .st.ok{background:var(--ok-bg);color:#15803d}
+.bindcard button.del{width:100%;padding:6px 2px;font-size:11px;border-radius:8px}
+/* 实时曲线 */
+.chartwrap{margin-top:13px;border:1px solid var(--line);border-radius:11px;background:#fcfdff;padding:10px}
+.chartwrap .ct{font-size:11.5px;color:var(--tx2);font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between}
+canvas{width:100%;height:130px;display:block}
+/* 存储条 */
+.storbar{margin-top:10px}
+.storbar .track{height:8px;border-radius:99px;background:#e8edf3;overflow:hidden}
+.storbar .fill{height:100%;border-radius:99px;background:var(--ok);transition:.3s}
+.storbar .fill.mid{background:#f59e0b}
+.storbar .fill.high{background:var(--bad)}
+.storbar .lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 </style>
 </head>
 <body>
@@ -110,27 +134,33 @@ button:disabled{opacity:.4;pointer-events:none}
 
 <!-- 1 本车绑定 -->
 <div class="card">
-  <div class="stephead"><div class="stepno">1</div><div class="stept">传感器绑定<small>每台手机一次,之后自动回连</small></div></div>
-  <div class="bigstate idle" id="bleState">未绑定传感器</div>
-  <div class="row" style="margin-top:12px">
-    <button id="btnBind" class="btnPri">绑定踏频传感器</button>
+  <div class="stephead"><div class="stepno">1</div><div class="stept">传感器绑定<small>每辆车绑一个,选车自动切换</small></div></div>
+  <div class="field"><label>给哪辆车绑定？</label><div class="seg cars" id="bindCarSeg"></div></div>
+  <div class="row" style="margin-top:4px">
+    <button id="btnBind" class="btnPri">绑定该车的传感器</button>
     <button id="btnTest">转动测试</button>
   </div>
-  <div class="hint">点「绑定」→ 在弹出列表中选本车的传感器（CADC 开头）→ 转动踏板,下方圈数应增加。绑定关系存本机,换被试不用重新绑。</div>
+  <div class="bindlist" id="bindList"></div>
+  <div class="chartwrap" id="chartWrap" style="display:none">
+    <div class="ct"><span id="chartTitle">转动测试 · 实时踏频</span><span id="chartInfo">-- RPM</span></div>
+    <canvas id="chart" width="600" height="130"></canvas>
+  </div>
+  <div class="hint">逐辆车:选车 → 点绑定 → 弹窗里选 CADC 开头的传感器 → 转动测试看曲线。采集时按第 2 步选的车自动连对应传感器,连错车的曲线对不上就能发现。</div>
 </div>
 
 <!-- 2 本次骑行打标 -->
 <div class="card">
   <div class="stephead"><div class="stepno">2</div><div class="stept">本次骑行打标<small>与问卷一致的编号</small></div></div>
   <div class="row">
-    <div class="field"><label>被试编号 *</label><input type="text" id="inSid" placeholder="如 S013" autocomplete="off"></div>
+    <div class="field"><label>用户编号 *</label><input type="text" id="inSid" placeholder="如 S013" autocomplete="off"></div>
+    <div class="field"><label>用户姓名</label><input type="text" id="inName" placeholder="如 张三" autocomplete="off"></div>
     <div class="field"><label>访问员</label><input type="text" id="inIv" placeholder="姓名" autocomplete="off"></div>
   </div>
-  <div class="field"><label>车辆 *</label><div class="seg" id="carSeg"></div></div>
+  <div class="field"><label>车辆 *</label><div class="seg cars" id="carSeg"></div></div>
   <div class="field"><label>圈次 *</label><div class="seg" id="lapSeg">
     <button data-v="explore">探索圈</button><button data-v="formal">正式圈</button>
   </div></div>
-  <div class="hint">编号必须与问卷系统里一致——这是两份数据关联的唯一钥匙。顶部会常显当前编号供核对。</div>
+  <div class="hint">用户编号必须与问卷系统里一致——这是两份数据关联的唯一钥匙。顶部会常显当前编号供核对。选中的车会用它绑定的传感器采集。</div>
 </div>
 
 <!-- 3 采集 -->
@@ -155,6 +185,10 @@ button:disabled{opacity:.4;pointer-events:none}
 <div class="card">
   <div class="stephead"><div class="stepno">4</div><div class="stept">已采会话<small>随时检查,随时导出</small></div></div>
   <div id="sessList"><div class="hint" style="margin-top:0">暂无会话。每次点「结束并保存」生成一条。</div></div>
+  <div class="storbar" id="storBar">
+    <div class="track"><div class="fill" id="storFill" style="width:0%"></div></div>
+    <div class="lbl"><span id="storTxt">存储: --</span><span>上限约 5MB,约够 10 人</span></div>
+  </div>
   <div class="row" style="margin-top:13px">
     <button id="btnExport" class="btnPri" disabled>导出全部(CSV)</button>
     <button id="btnCopy" disabled>复制数据</button>
@@ -172,7 +206,10 @@ button:disabled{opacity:.4;pointer-events:none}
 <script>
 "use strict";
 /* ================= 配置 ================= */
-var CARS=[['A','绿A'],['B','绿B'],['C','绿C'],['BL','小蓝'],['Y','小黄']];
+/* 10 辆车:每角色 2 辆(绿A1/A2 基线、绿B1/B2 手动、绿C1/C2 自动、小蓝1/2、小黄1/2) */
+var CARS=[['A1','绿A1'],['A2','绿A2'],['B1','绿B1'],['B2','绿B2'],
+          ['C1','绿C1'],['C2','绿C2'],['BL1','小蓝1'],['BL2','小蓝2'],
+          ['Y1','小黄1'],['Y2','小黄2']];
 var CSC_SVC='cycling_speed_and_cadence';      // 0x1816
 var CSC_MEAS=0x2A5B;
 var STORE_KEY='ride_collect_v1';               // 会话存储
@@ -183,9 +220,11 @@ function log(msg,cls){var el=$('log');el.textContent=new Date().toTimeString().s
 function warn(html,isBad){var el=$('warnBox');if(html){el.innerHTML=html;el.classList.add('show');el.classList.toggle('bad',!!isBad)}else{el.classList.remove('show','bad')}}
 
 /* ================= 状态 ================= */
-var bindInfo=null;        // {id,name} 已绑定的传感器
+var bindMap={};           // {carKey:{id,name}} 每辆车绑定的传感器
+var curBindCar='';        // 第1步正在为哪辆车绑定
 var device=null,gatt=null,measChar=null;
 var bleConnected=false,notifyOn=false;
+var connectedCar='';      // 当前蓝牙连接的是哪辆车的传感器
 var recording=false;
 var sess=null;            // 当前进行中的会话对象
 var sessions=[];          // 已完成会话
@@ -193,28 +232,39 @@ var lastCrank={rev:-1,ts:-1};   // 上一事件(差分)
 var rpmLast=-1, rpmT=0;
 var gpsWatchId=null;
 var wakeLock=null;
+var chartPts=[];          // 转动测试曲线点 [{t,rpm}]
+var chartOn=false;
 
 /* ================= 持久化 ================= */
 function loadStore(){try{var s=localStorage.getItem(STORE_KEY);if(s)sessions=JSON.parse(s)||[]}catch(e){}}
-function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(sessions))}catch(e){warn('本机存储空间不足!请尽快导出并清空。',true)}}
-function loadBind(){try{var s=localStorage.getItem(BIND_KEY);if(s)bindInfo=JSON.parse(s)}catch(e){}}
-function saveBind(){try{localStorage.setItem(BIND_KEY,JSON.stringify(bindInfo))}catch(e){}}
+function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(sessions));updateStorBar()}catch(e){warn('本机存储空间不足!请立即导出并清空,否则新数据将丢失。',true)}}
+function loadBind(){try{var s=localStorage.getItem(BIND_KEY);if(s){var o=JSON.parse(s);
+  if(o&&o.id){bindMap={A1:{id:o.id,name:o.name||'旧绑定'}}}   /* 旧版单绑定迁移到绿A1 */
+  else if(o){
+    /* 旧版单车键(A/B/C/BL/Y)迁移到 ×1 编号 */
+    var LEG={'A':'A1','B':'B1','C':'C1','BL':'BL1','Y':'Y1'};
+    Object.keys(o).forEach(function(k){bindMap[LEG[k]||k]=o[k]});
+  }}}catch(e){}}
+function saveBind(){try{localStorage.setItem(BIND_KEY,JSON.stringify(bindMap))}catch(e){}}
 
 /* ================= 车辆/圈次选择 ================= */
 var curCar='',curLap='';
-(function(){var h='';CARS.forEach(function(c){h+='<button data-v="'+c[0]+'">'+c[1]+'</button>'});$('carSeg').innerHTML=h})();
+(function(){var h='';CARS.forEach(function(c){h+='<button data-v="'+c[0]+'">'+c[1]+'</button>'});$('carSeg').innerHTML=h;
+  var h2='';CARS.forEach(function(c){h2+='<button data-v="'+c[0]+'">'+c[1]+'</button>'});$('bindCarSeg').innerHTML=h2})();
 function segBind(id,cb){var el=$(id);el.querySelectorAll('button').forEach(function(b){b.addEventListener('click',function(){
   el.querySelectorAll('button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');cb(b.getAttribute('data-v'))})})}
-segBind('carSeg',function(v){curCar=v;validateStart()});
+segBind('carSeg',function(v){curCar=v;renderBindList();validateStart()});
+segBind('bindCarSeg',function(v){curBindCar=v;renderBindList()});
 segBind('lapSeg',function(v){curLap=v;validateStart()});
 $('inSid').addEventListener('input',validateStart);
+$('inName').addEventListener('input',validateStart);
 $('inIv').addEventListener('input',validateStart);
 
 function validateStart(){
-  $('btnStart').disabled=!(recording===false&&bindInfo&&$('inSid').value.trim()&&curCar&&curLap);
+  $('btnStart').disabled=!(recording===false&&curCar&&bindMap[curCar]&&$('inSid').value.trim()&&curLap);
   var s=$('inSid').value.trim();
   $('hsub').textContent=recording?('采集中 · '+(s||'?')+' · '+carName(curCar)):
-    (bindInfo?(s?(s+' · '+carName(curCar)):'已绑定 '+bindInfo.name):'未绑定');
+    (curCar?(s?(s+' · '+carName(curCar)+(bindMap[curCar]?'':' ⚠未绑传感器')):carName(curCar)+(bindMap[curCar]?'':' ⚠未绑传感器')):'未选车');
 }
 function carName(v){for(var i=0;i<CARS.length;i++)if(CARS[i][0]===v)return CARS[i][1];return v||'-'}
 
@@ -224,30 +274,85 @@ function setCscSupport(){
   if(!window.isSecureContext){warn('当前不是 HTTPS 页面,浏览器会禁用蓝牙。<br>请通过 https:// 网址打开本页(不要双击本地文件)。',true);return false}
   return true;
 }
+/* 绑定列表渲染 */
+function renderBindList(){
+  var host=$('bindList'),h='';
+  CARS.forEach(function(c){
+    var b=bindMap[c[0]];
+    var connected=(bleConnected&&connectedCar===c[0]&&device&&device.id===b.id);
+    h+='<div class="bindcard'+((curCar===c[0])?' cur':'')+'">'+
+      '<span class="carn">'+c[1]+'</span>'+
+      '<span class="dev" title="'+(b?esc(b.name||b.id):'')+'">'+(b?esc(b.name||b.id):'<span style="color:var(--muted)">—</span>')+'</span>'+
+      (b?'<span class="st'+(connected?' ok':'')+'">'+(connected?'连接中':'已存')+'</span>':'<span class="st" style="visibility:hidden">·</span>')+
+      (b?'<button class="del" data-delcar="'+c[0]+'">解绑</button>':'<span style="height:32px"></span>')+
+      '</div>';
+  });
+  host.innerHTML=h;
+  host.querySelectorAll('button[data-delcar]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var ck=btn.getAttribute('data-delcar');
+      if(!confirm('解绑 '+carName(ck)+' 的传感器?'))return;
+      delete bindMap[ck];saveBind();renderBindList();validateStart();log(carName(ck)+' 已解绑');
+    });
+  });
+}
 $('btnBind').addEventListener('click',function(){
   if(!setCscSupport())return;
+  if(!curBindCar){warn('先在上面选中要给哪辆车绑定。');return}
   navigator.bluetooth.requestDevice({filters:[{services:[CSC_SVC]}],optionalServices:[CSC_SVC]})
   .then(function(d){
+    /* 防重:同一传感器绑到两辆车 */
+    for(var k in bindMap){
+      if(bindMap[k]&&bindMap[k].id===d.id&&k!==curBindCar){
+        warn('这个传感器已经绑给 <b>'+carName(k)+'</b> 了,不能同时绑两辆车。先解绑再试。',true);
+        log('绑定冲突: '+d.name+' 已属 '+carName(k));
+        return;
+      }
+    }
     device=d;
-    bindInfo={id:d.id,name:(d.name||'CADC 传感器')};
-    saveBind();
-    log('已选择传感器: '+bindInfo.name);
-    $('bleState').textContent='已绑定: '+bindInfo.name+' · 连接中…';
-    $('bleState').className='bigstate conn';
-    return connectGatt();
+    bindMap[curBindCar]={id:d.id,name:(d.name||('CADC '+curBindCar))};
+    connectedCar=curBindCar;
+    saveBind();renderBindList();
+    log(carName(curBindCar)+' 已绑定传感器: '+bindMap[curBindCar].name);
+    return disconnectGatt().then(function(){return connectGatt()});
   })
   .then(function(){validateStart()})
   .catch(function(e){
-    if(e.name==='NotFoundError'){log('取消了绑定选择');return}
+    if(e&&e.name==='NotFoundError'){log('取消了绑定选择');return}
     warn('绑定失败: '+(e.message||e.name),true);log('绑定失败: '+e.message);
   });
 });
+function disconnectGatt(){
+  if(device&&device.gatt&&device.gatt.connected){try{device.removeEventListener('gattserverdisconnected',onDisconnect)}catch(e){}
+    try{return device.gatt.disconnect()}catch(e){}}
+  bleConnected=false;notifyOn=false;connectedCar='';
+  return Promise.resolve();
+}
+/* 连接指定车的传感器;若当前连的不是这辆车的,先断开重连 */
+function connectCar(ck){
+  var b=bindMap[ck];
+  if(!b)return Promise.reject(new Error(carName(ck)+' 还没绑定传感器'));
+  /* 已连着正确的设备 */
+  if(bleConnected&&device&&device.id===b.id&&notifyOn)return Promise.resolve();
+  return disconnectGatt().then(function(){
+    return navigator.bluetooth.getDevices?navigator.bluetooth.getDevices():null;
+  }).then(function(list){
+    if(list){   /* 按 id 找回 device 对象(自动回连API) */
+      var found=null;
+      for(var i=0;i<list.length;i++)if(list[i].id===b.id)found=list[i];
+      if(found)device=found;
+    }
+    if(!device||device.id!==b.id)return Promise.reject(new Error('找不到 '+carName(ck)+' 的传感器,请重新绑定'));
+    connectedCar=ck;
+    return connectGatt();
+  });
+}
 function connectGatt(){
   if(!device)return Promise.reject(new Error('未选择设备'));
   return device.gatt.connect()
   .then(function(g){
     gatt=g;bleConnected=true;
-    $('stBle').textContent='已连接';updateDot();
+    $('stBle').textContent='已连接 '+(connectedCar?carName(connectedCar):'');updateDot();renderBindList();
     device.addEventListener('gattserverdisconnected',onDisconnect);
     return g.getPrimaryService(CSC_SVC);
   })
@@ -255,28 +360,25 @@ function connectGatt(){
   .then(function(c){
     measChar=c;
     return c.startNotifications().then(function(){
-      notifyOn=true;c.addEventListener('characteristicvaluechanged',onCsc);log('踏频数据订阅成功');
-      $('bleState').innerHTML='已绑定: '+(bindInfo?bindInfo.name:'')+' · <b style="color:#16a34a">数据接收中</b>';
-      $('bleState').className='bigstate ready';
+      notifyOn=true;c.addEventListener('characteristicvaluechanged',onCsc);
+      log('踏频数据订阅成功 ('+(connectedCar?carName(connectedCar):'')+')');
     });
   })
   .catch(function(e){
-    bleConnected=false;$('stBle').textContent='连接失败';updateDot();
+    bleConnected=false;$('stBle').textContent='连接失败';updateDot();renderBindList();
     log('GATT 连接失败: '+(e.message||e.name));
     throw e;
   });
 }
 function onDisconnect(){
   bleConnected=false;notifyOn=false;updateDot();$('stBle').textContent='已断开';
-  $('bleState').innerHTML='已绑定: '+(bindInfo?bindInfo.name:'')+' · <b style="color:#dc2626">已断开,自动重连中…</b>';
-  $('bleState').className='bigstate idle';
-  if(recording&&sess){sess.events.push({t:Date.now(),type:'ble_reconnect'})}   // 断点标记
   log('蓝牙断开,尝试自动重连…');
+  if(recording&&sess){sess.events.push({t:Date.now(),type:'ble_reconnect'})}   // 断点标记
   setTimeout(function(){reconnect()},1500);
 }
 function reconnect(){
   if(!device||bleConnected)return;
-  connectGatt().then(function(){log('重连成功');if(recording&&sess)sess.events.push({t:Date.now(),type:'ble_resumed'})})
+  connectGatt().then(function(){log('重连成功');renderBindList();if(recording&&sess)sess.events.push({t:Date.now(),type:'ble_resumed'})})
   .catch(function(){setTimeout(reconnect,3000)});
 }
 /* CSC Measurement 解析: flags1 + [wheel:4+2] + [crank:2+2] */
@@ -298,29 +400,82 @@ function onCsc(e){
       var dRev=(cRev-lastCrank.rev+65536)%65536;
       var dTs=(cTs-lastCrank.ts+65536)%65536;
       if(dRev>0&&dRev<300&&dTs>0){rpmLast=Math.round(dRev/dTs*1024*60);rpmT=Date.now();
-        if(recording&&sess&&sess.rpmMax<rpmLast)sess.rpmMax=rpmLast}
+        if(recording&&sess&&sess.rpmMax<rpmLast)sess.rpmMax=rpmLast;
+        $('vRpm').textContent=rpmLast;   /* 事件到达即刷新,不等轮询 */}
     }
     lastCrank={rev:cRev,ts:cTs};
+    if(chartOn&&chartT0){chartPts.push({t:Date.now()-chartT0,rpm:(rpmT===Date.now()?rpmLast:0),tick:1});chartTick()} /* 事件打点+即时重绘 */
     if(recording&&sess){sess.crankCount++;$('vCnt').textContent=sess.crankCount}
   }
 }
+/* 转动测试:实时曲线(纵轴自适应量程)+事件计数。
+   判定标准就一条:转动时「事件数」在涨=连对;不涨=连错车/没连上。 */
 $('btnTest').addEventListener('click',function(){
-  if(!bindInfo){warn('先点「绑定踏频传感器」。');return}
-  if(!bleConnected&&device){reconnect()}
-  if(!notifyOn){warn('传感器未连接/未订阅,先重新绑定或等自动重连。',true);return}
-  var before=sess?sess.crankCount:0;
-  warn('现在<b>转动踏板 5 秒以上</b>——上方「踏频 RPM」应有数字跳动、圈数递增。正常就说明本车绑定成功。');
-  log('转动测试开始(记录 10 秒)');
-  var t0=Date.now(),maxR=0,n=0;
+  var ck=curBindCar||curCar;
+  if(!ck){warn('先在第 1 步选车。');return}
+  if(!bindMap[ck]){warn(carName(ck)+' 还没绑定传感器,先点「绑定该车的传感器」。');return}
+  if(!notifyOn||!bleConnected||connectedCar!==ck){
+    connectCar(ck).catch(function(e){warn('连接失败: '+(e.message||e),true)});
+  }
+  warn('现在<b>转动 '+carName(ck)+' 的踏板</b>。判定就看一个数:<b>「事件数」在涨=连对了</b>;转着但数字不动=连错车或没连上。');
+  chartPts=[];chartOn=true;chartT0=Date.now();chartMaxR=0;
+  $('chartWrap').style.display='block';
+  log('转动测试开始 '+carName(ck)+'(记录 15 秒)');
   var iv=setInterval(function(){
-    if(rpmLast>0)maxR=Math.max(maxR,rpmLast);
-    n++;
-    if(Date.now()-t0>10000){clearInterval(iv);
-      if(maxR>0){warn('测试通过:最高踏频 '+maxR+' RPM,链路正常。');log('转动测试 PASS max='+maxR)}
-      else{warn('10 秒内没收到踏频数据。检查:传感器电池是否装好(装电池红灯闪=踏频模式)/曲柄是否转动/距离是否过远。',true);log('转动测试 FAIL')}
+    if(rpmLast>0&&Date.now()-rpmT<4000)chartMaxR=Math.max(chartMaxR,rpmLast);
+    if(Date.now()-chartT0>15000){clearInterval(iv);chartOn=false;chartT0=0;
+      var n=chartPts.length;
+      if(n>=3){warn('测试通过:<b>'+carName(ck)+'</b> 收到 '+n+' 个踏频事件,链路正常。');log('转动测试 PASS '+carName(ck)+' events='+n)}
+      else if(n>0){warn('只收到 '+n+' 个事件,偏少。再多转几下重测一次。',true);log('转动测试 WEAK '+carName(ck)+' events='+n)}
+      else{warn('15 秒 0 事件。检查:①传感器电池(装电池红灯闪=踏频模式) ②转的是不是 <b>'+carName(ck)+'</b> 这辆车 ③距离是否过远。',true);log('转动测试 FAIL '+carName(ck))}
     }
-  },200);
+  },500);
 });
+var chartT0=0,chartMaxR=0,chartDirty=false;
+function chartTick(){   /* 事件到达即请求重绘(每帧最多一次) */
+  if(chartDirty)return;chartDirty=true;
+  if(window.requestAnimationFrame)requestAnimationFrame(drawChart);
+  else setTimeout(drawChart,30);
+}
+function drawChart(){
+  chartDirty=false;
+  var cv=$('chart'),ctx=cv.getContext('2d');
+  var W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  /* 标题行:事件数(主判定) + 当前RPM */
+  var lastR=(rpmLast>0&&Date.now()-rpmT<4000)?rpmLast:0;
+  var n=chartPts.length;
+  $('chartTitle').innerHTML='事件 <b style="font-size:17px;color:'+(n?'#16a34a':'#dc2626')+'">'+n+'</b>'+
+    ' <span style="color:var(--muted);font-weight:600">转动时应持续增加</span>';
+  $('chartInfo').textContent=lastR?lastR+' RPM':'-- RPM';
+  /* 网格 + 纵轴自适应:量程=已见最大RPM×1.4(下限40),刻度只标 0/半程/满程 */
+  var WIN=15000;
+  var maxY=Math.max(40,Math.ceil(chartMaxR*1.4/10)*10);
+  ctx.strokeStyle='#e3e8ef';ctx.lineWidth=1;
+  for(var g=0;g<=2;g++){var y=10+(H-20)*g/2;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  ctx.fillStyle='#94a3b8';ctx.font='15px sans-serif';
+  ctx.fillText(String(maxY),4,24);ctx.fillText(String(Math.round(maxY/2)),4,(H+10)/2);ctx.fillText('0',4,H-6);
+  ctx.fillText('15s',W-30,H-6);
+  if(!n)return;
+  /* 事件刻度线:每个踏频事件一道,从底画到半高——慢转也醒目 */
+  ctx.strokeStyle='#60a5fa';ctx.lineWidth=2;
+  for(var i=0;i<n;i++){
+    var tk=chartPts[i];
+    var tx=tk.t/WIN*W;
+    ctx.beginPath();ctx.moveTo(tx,H-10);ctx.lineTo(tx,H/2);ctx.stroke();
+  }
+  /* RPM 折线:有效值连成粗线 */
+  var linePts=chartPts.filter(function(p){return p.rpm>0});
+  if(linePts.length>=2){
+    ctx.strokeStyle='#1d4ed8';ctx.lineWidth=3;ctx.beginPath();
+    for(var j=0;j<linePts.length;j++){
+      var p2=linePts[j];
+      var x2=p2.t/WIN*W,y2=H-10-Math.min(p2.rpm,maxY)/maxY*(H-20);
+      if(j===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
+    }
+    ctx.stroke();
+  }
+}
 
 /* ================= GPS ================= */
 function gpsStart(){
@@ -347,14 +502,12 @@ $('btnStart').addEventListener('click',function(){
   var sid=$('inSid').value.trim();
   if(!sid||!curCar||!curLap){validateStart();return}
   if(!setCscSupport())return;
-  if(!bindInfo){warn('先绑定传感器再开始。',true);return}
-  /* 蓝牙未连则先连 */
-  var pre=(bleConnected&&notifyOn)?Promise.resolve():
-    (device?connectGatt():Promise.reject(new Error('传感器未绑定')));
-  pre.then(function(){
+  if(!bindMap[curCar]){warn(carName(curCar)+' 还没绑定传感器,先到第 1 步绑定。',true);return}
+  /* 连接所选车的传感器(自动切换) */
+  connectCar(curCar).then(function(){
     sess={
-      sid:sid,iv:$('inIv').value.trim(),car:curCar,lap:curLap,
-      deviceName:bindInfo.name,deviceId:bindInfo.id,
+      sid:sid,name:$('inName').value.trim(),iv:$('inIv').value.trim(),car:curCar,lap:curLap,
+      deviceName:bindMap[curCar].name,deviceId:bindMap[curCar].id,
       start:Date.now(),end:0,
       events:[],gps:[],crankCount:0,rpmMax:0,spdMax:0
     };
@@ -362,11 +515,11 @@ $('btnStart').addEventListener('click',function(){
     recording=true;
     $('btnStart').disabled=true;$('btnStop').disabled=false;
     $('vRpm').textContent='--';$('vSpd').textContent='--';$('vCnt').textContent='0';$('stGps').textContent='0';
-    warn(null);
+    warn('采集中。顶部「蓝牙状态」应显示 <b>已连接 '+carName(curCar)+'</b>——出发前扫一眼,确认连的是这辆车的传感器。');
     gpsStart();requestWake();
     $('hsub').textContent='采集中 · '+sid+' · '+carName(curCar);
-    updateDot();
-    log('开始采集: '+sid+' '+carName(curCar)+' '+(curLap==='explore'?'探索圈':'正式圈'));
+    updateDot();renderBindList();
+    log('开始采集: '+sid+' '+carName(curCar)+' '+(curLap==='explore'?'探索圈':'正式圈')+' 传感器:'+bindMap[curCar].name);
     /* 实时 RPM 刷新 */
     rpmTimer=setInterval(function(){
       if(rpmLast>0&&Date.now()-rpmT<3000)$('vRpm').textContent=rpmLast;
@@ -388,7 +541,6 @@ $('btnStop').addEventListener('click',function(){
   sess=null;
   $('btnStop').disabled=true;
   $('vRpm').textContent='--';$('vSpd').textContent='--';
-  $('hsub').textContent=(bindInfo?'已绑定 '+bindInfo.name:'未绑定');
   updateDot();renderSessions();validateStart();
 });
 
@@ -401,15 +553,16 @@ function renderSessions(){
   var h='';
   sessions.forEach(function(s,idx){
     var dur=s.end&&s.start?((s.end-s.start)/1000).toFixed(0):'-';
+    var sizeK=(JSON.stringify(s).length/1024).toFixed(0);
     var warnTxt=(s.crankCount<20)?'<span style="color:#b45309">踏频事件偏少,建议重采</span>':
       (s.gps.length<30?'<span style="color:#b45309">GPS 点偏少,检查定位权限</span>':'数据量正常');
-    h+='<div class="sess"><div class="top"><span class="who">'+esc(s.sid)+'</span>'+
+    h+='<div class="sess"><div class="top"><span class="who">'+esc(s.sid)+(s.name?' · '+esc(s.name):'')+'</span>'+
       '<span class="tags"><span class="tg car">'+carName(s.car)+'</span>'+
       '<span class="tg lap">'+(s.lap==='explore'?'探索圈':'正式圈')+'</span>'+
       (s.iv?'<span class="tg">'+esc(s.iv)+'</span>':'')+'</span></div>'+
       '<div class="meta"><span>'+fmtShort(s.start)+'</span><span>时长 '+dur+'s</span>'+
       '<span>踏频 '+s.crankCount+' 事件</span><span>峰值RPM '+s.rpmMax+'</span><span>GPS '+s.gps.length+' 点</span>'+
-      '<span>峰值 '+s.spdMax.toFixed(1)+'km/h</span></div>'+
+      '<span>峰值 '+s.spdMax.toFixed(1)+'km/h</span><span>'+sizeK+'KB</span></div>'+
       '<div class="meta">'+warnTxt+'</div>'+
       '<div class="ops"><button data-op="del" data-i="'+idx+'">删除</button></div></div>';
   });
@@ -432,11 +585,11 @@ function buildCSV(){
   var L=[];
   L.push('# ride_collect v1');
   L.push('# exported='+fmtFull(Date.now()));
-  L.push('# bind_device='+(bindInfo?bindInfo.name:''));
+  L.push('# bind_map='+Object.keys(bindMap).map(function(k){return carName(k)+'='+bindMap[k].name}).join(' | '));
   L.push('# ua='+navigator.userAgent.replace(/,/g,';'));
   sessions.forEach(function(s,si){
     L.push('');
-    L.push('# ===== session '+(si+1)+' sid='+s.sid+' car='+s.car+'('+carName(s.car)+') lap='+s.lap+
+    L.push('# ===== session '+(si+1)+' sid='+s.sid+(s.name?' name='+s.name:'')+' car='+s.car+'('+carName(s.car)+') lap='+s.lap+
       ' iv='+s.iv+' start_ms='+s.start+' end_ms='+s.end+' crank_events='+s.crankCount+
       ' rpm_max='+s.rpmMax+' spd_max_kmh='+s.spdMax.toFixed(2)+' gps_points='+s.gps.length+' =====');
     L.push('t_unix_ms,t_local,kind,rev,sts,lat,lon,acc_m,gps_spd_ms');
@@ -497,6 +650,23 @@ $('btnReset').addEventListener('click',function(){
   if(!confirm('再次确认:请先确保已导出!确定清空?'))return;
   sessions=[];saveStore();renderSessions();log('已清空全部会话');
 });
+/* ================= 存储用量 =================
+   实测:5 分钟一圈 ≈ 60-80KB(踏频事件300×90B + GPS 300×70B)
+   localStorage 一般上限 5MB(安卓 Chrome 按源计) → 约 60-80 圈 / 10 人
+   70% 起黄条警告,85% 起红条强警告 */
+var STOR_LIMIT=5*1024*1024;
+function updateStorBar(){
+  try{
+    var used=(localStorage.getItem(STORE_KEY)||'').length*2;   /* UTF-16 每字符2字节 */
+    var pct=Math.min(100,used/STOR_LIMIT*100);
+    var fill=$('storFill');if(!fill)return;
+    fill.style.width=pct.toFixed(1)+'%';
+    fill.className='fill'+(pct>=85?' high':(pct>=70?' mid':''));
+    $('storTxt').textContent='存储: '+(used/1024).toFixed(0)+'KB / 约'+(STOR_LIMIT/1024/1024).toFixed(0)+'MB ('+pct.toFixed(0)+'%) · '+sessions.length+' 段会话';
+    if(pct>=85)warn('存储快满了('+pct.toFixed(0)+'%)!<b>立即导出并清空</b>,否则下一段会话将保存失败。',true);
+    else if(pct>=70)warn('存储已用 '+pct.toFixed(0)+'%。建议现在导出一次,导出后数据不会丢。');
+  }catch(e){}
+}
 /* ================= 屏幕常亮 ================= */
 function requestWake(){
   if('wakeLock'in navigator){navigator.wakeLock.request('screen').then(function(w){
@@ -513,14 +683,18 @@ function updateDot(){var d=$('hdot');d.className='dot'+(recording?' rec':(bleCon
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 /* 启动 */
 loadStore();loadBind();
-renderSessions();
-if(bindInfo){
-  $('bleState').textContent='已绑定: '+bindInfo.name+' · 点「转动测试」验证,或直接开始采集(将自动连接)';
-  $('bleState').className='bigstate conn';
-  log('本机已绑定过传感器 '+bindInfo.name+'(开始采集时自动回连)');
-}else{
-  setCscSupport();
-}
+renderBindList();renderSessions();updateStorBar();
+(function(){ /* 默认选中第一辆已绑定的车 */
+  var first='';
+  CARS.forEach(function(c){if(!first&&bindMap[c[0]])first=c[0]});
+  var pick=first||CARS[0][0];
+  ['bindCarSeg','carSeg'].forEach(function(id){
+    $(id).querySelectorAll('button').forEach(function(b){
+      if(b.getAttribute('data-v')===pick)b.click()});
+  });
+})();
+if(!Object.keys(bindMap).length)setCscSupport();
+else log('本机已绑定 '+Object.keys(bindMap).length+' 个传感器(开始采集时自动连所选车)');
 validateStart();
 window.addEventListener('beforeunload',function(e){
   if(recording){e.preventDefault();e.returnValue='采集进行中,离开将丢失当前段数据!'}
