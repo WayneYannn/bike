@@ -404,7 +404,16 @@ function onCsc(e){
         $('vRpm').textContent=rpmLast;   /* 事件到达即刷新,不等轮询 */}
     }
     lastCrank={rev:cRev,ts:cTs};
-    if(chartOn&&chartT0){chartPts.push({t:Date.now()-chartT0,rpm:(rpmT===Date.now()?rpmLast:0),tick:1});chartTick()} /* 事件打点+即时重绘 */
+    if(chartOn&&chartT0){chartPkts.push(Date.now());
+      /* 图表用:本包间隔内的"每秒圈数"(差分归一)——显示专用,存储逻辑不动 */
+      if(chartLast.rev>=0){
+        var gdRev=(cRev-chartLast.rev+65536)%65536;
+        var gdSec=Math.max(0.2,(Date.now()-chartLast.t)/1000);
+        chartPts.push({t:Date.now()-chartT0,rps:gdRev/gdSec});
+      }
+      if(chartRev0<0)chartRev0=cRev;chartRevN=cRev;
+      chartLast={rev:cRev,t:Date.now()};
+      chartTick()} /* 即时重绘 */
     if(recording&&sess){sess.crankCount++;$('vCnt').textContent=sess.crankCount}
   }
 }
@@ -418,20 +427,27 @@ $('btnTest').addEventListener('click',function(){
     connectCar(ck).catch(function(e){warn('连接失败: '+(e.message||e),true)});
   }
   warn('现在<b>转动 '+carName(ck)+' 的踏板</b>。判定就看一个数:<b>「事件数」在涨=连对了</b>;转着但数字不动=连错车或没连上。');
-  chartPts=[];chartOn=true;chartT0=Date.now();chartMaxR=0;
+  chartPts=[];chartOn=true;chartT0=Date.now();chartMaxR=0;chartPkts=[];chartRev0=-1;chartRevN=0;chartLast={rev:-1,t:0};
   $('chartWrap').style.display='block';
   log('转动测试开始 '+carName(ck)+'(记录 15 秒)');
   var iv=setInterval(function(){
     if(rpmLast>0&&Date.now()-rpmT<4000)chartMaxR=Math.max(chartMaxR,rpmLast);
+    /* 包率:最近3秒每秒平均收包数(传感器正常约1包/秒;0.5说明慢转下包更稀) */
+    var cut=Date.now()-3000;
+    chartPkts=chartPkts.filter(function(t){return t>cut});
+    var hz=(chartPkts.length/3).toFixed(1);
+    $('chartInfo').textContent=(hz+' 包/秒')+((rpmLast>0&&Date.now()-rpmT<4000)?' · '+rpmLast+' RPM':' · -- RPM');
     if(Date.now()-chartT0>15000){clearInterval(iv);chartOn=false;chartT0=0;
       var n=chartPts.length;
-      if(n>=3){warn('测试通过:<b>'+carName(ck)+'</b> 收到 '+n+' 个踏频事件,链路正常。');log('转动测试 PASS '+carName(ck)+' events='+n)}
-      else if(n>0){warn('只收到 '+n+' 个事件,偏少。再多转几下重测一次。',true);log('转动测试 WEAK '+carName(ck)+' events='+n)}
-      else{warn('15 秒 0 事件。检查:①传感器电池(装电池红灯闪=踏频模式) ②转的是不是 <b>'+carName(ck)+'</b> 这辆车 ③距离是否过远。',true);log('转动测试 FAIL '+carName(ck))}
+      var revs=(chartRev0>=0)?((chartRevN-chartRev0+65536)%65536):0;
+      var sum='共收到 '+n+' 个数据包 · 曲柄累计转过 '+revs+' 圈';
+      if(n>=3){warn('测试通过:<b>'+carName(ck)+'</b> 链路正常。'+sum+'。慢转时曲线断续是正常的——真实骑行(60+转/分)曲线会连续。');log('转动测试 PASS '+carName(ck)+' pkts='+n+' revs='+revs)}
+      else if(n>0){warn('只收到 '+n+' 个数据包,偏少。再多转几下重测一次。',true);log('转动测试 WEAK '+carName(ck)+' pkts='+n)}
+      else{warn('15 秒 0 数据包。检查:①传感器电池(装电池红灯闪=踏频模式) ②转的是不是 <b>'+carName(ck)+'</b> 这辆车 ③距离是否过远。',true);log('转动测试 FAIL '+carName(ck))}
     }
   },500);
 });
-var chartT0=0,chartMaxR=0,chartDirty=false;
+var chartT0=0,chartMaxR=0,chartDirty=false,chartPkts=[],chartRev0=-1,chartRevN=0,chartLast={rev:-1,t:0};
 function chartTick(){   /* 事件到达即请求重绘(每帧最多一次) */
   if(chartDirty)return;chartDirty=true;
   if(window.requestAnimationFrame)requestAnimationFrame(drawChart);
@@ -442,38 +458,36 @@ function drawChart(){
   var cv=$('chart'),ctx=cv.getContext('2d');
   var W=cv.width,H=cv.height;
   ctx.clearRect(0,0,W,H);
-  /* 标题行:事件数(主判定) + 当前RPM */
-  var lastR=(rpmLast>0&&Date.now()-rpmT<4000)?rpmLast:0;
-  var n=chartPts.length;
-  $('chartTitle').innerHTML='事件 <b style="font-size:17px;color:'+(n?'#16a34a':'#dc2626')+'">'+n+'</b>'+
+  /* 标题行:数据包计数(主判定) + 每秒圈数 */
+  var lastRps=chartPts.length?chartPts[chartPts.length-1].rps:0;
+  var n=chartPkts.length;
+  $('chartTitle').innerHTML='数据包 <b style="font-size:17px;color:'+(n?'#16a34a':'#dc2626')+'">'+n+'</b>'+
     ' <span style="color:var(--muted);font-weight:600">转动时应持续增加</span>';
-  $('chartInfo').textContent=lastR?lastR+' RPM':'-- RPM';
-  /* 网格 + 纵轴自适应:量程=已见最大RPM×1.4(下限40),刻度只标 0/半程/满程 */
+  /* 网格 + 纵轴自适应(每秒圈数,量程=已见最大×1.4,下限2) */
   var WIN=15000;
-  var maxY=Math.max(40,Math.ceil(chartMaxR*1.4/10)*10);
+  var maxV=2;
+  for(var q=0;q<chartPts.length;q++)if(chartPts[q].rps>maxV)maxV=chartPts[q].rps;
+  maxV=Math.ceil(maxV*1.4*10)/10;
   ctx.strokeStyle='#e3e8ef';ctx.lineWidth=1;
   for(var g=0;g<=2;g++){var y=10+(H-20)*g/2;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
   ctx.fillStyle='#94a3b8';ctx.font='15px sans-serif';
-  ctx.fillText(String(maxY),4,24);ctx.fillText(String(Math.round(maxY/2)),4,(H+10)/2);ctx.fillText('0',4,H-6);
-  ctx.fillText('15s',W-30,H-6);
-  if(!n)return;
-  /* 事件刻度线:每个踏频事件一道,从底画到半高——慢转也醒目 */
-  ctx.strokeStyle='#60a5fa';ctx.lineWidth=2;
-  for(var i=0;i<n;i++){
-    var tk=chartPts[i];
-    var tx=tk.t/WIN*W;
-    ctx.beginPath();ctx.moveTo(tx,H-10);ctx.lineTo(tx,H/2);ctx.stroke();
-  }
-  /* RPM 折线:有效值连成粗线 */
-  var linePts=chartPts.filter(function(p){return p.rpm>0});
-  if(linePts.length>=2){
-    ctx.strokeStyle='#1d4ed8';ctx.lineWidth=3;ctx.beginPath();
-    for(var j=0;j<linePts.length;j++){
-      var p2=linePts[j];
-      var x2=p2.t/WIN*W,y2=H-10-Math.min(p2.rpm,maxY)/maxY*(H-20);
-      if(j===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
+  ctx.fillText(maxV.toFixed(1),4,24);ctx.fillText((maxV/2).toFixed(1),4,(H+10)/2);ctx.fillText('0.0',4,H-6);
+  ctx.fillText('圈/秒',4,42);ctx.fillText('15s',W-30,H-6);
+  if(chartPts.length>=2){
+    /* 平滑曲线:相邻点中点二次贝塞尔(标准 smoothing 手法) */
+    var pts=chartPts.map(function(p){return {x:p.t/WIN*W,y:H-10-Math.min(p.rps,maxV)/maxV*(H-20)}});
+    ctx.strokeStyle='#1d4ed8';ctx.lineWidth=3;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x,pts[0].y);
+    for(var i=1;i<pts.length-1;i++){
+      var xc=(pts[i].x+pts[i+1].x)/2,yc=(pts[i].y+pts[i+1].y)/2;
+      ctx.quadraticCurveTo(pts[i].x,pts[i].y,xc,yc);
     }
+    var lp=pts[pts.length-1];
+    ctx.lineTo(lp.x,lp.y);
     ctx.stroke();
+    /* 端点圆点 */
+    ctx.fillStyle='#1d4ed8';ctx.beginPath();ctx.arc(lp.x,lp.y,4,0,Math.PI*2);ctx.fill();
   }
 }
 
