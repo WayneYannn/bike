@@ -134,7 +134,7 @@ canvas{width:100%;height:130px;display:block}
 
 <!-- 1 本车绑定 -->
 <div class="card">
-  <div class="stephead"><div class="stepno">1</div><div class="stept">传感器绑定<small>每辆车绑一个,选车自动切换</small></div></div>
+  <div class="stephead"><div class="stepno">1</div><div class="stept">传感器绑定<small id="bindProg">开场绑一次,全天不用再管</small></div></div>
   <div class="field"><label>给哪辆车绑定？</label><div class="seg cars" id="bindCarSeg"></div></div>
   <div class="row" style="margin-top:4px">
     <button id="btnBind" class="btnPri">绑定该车的传感器</button>
@@ -145,7 +145,7 @@ canvas{width:100%;height:130px;display:block}
     <div class="ct"><span id="chartTitle">转动测试 · 实时踏频</span><span id="chartInfo">-- RPM</span></div>
     <canvas id="chart" width="600" height="130"></canvas>
   </div>
-  <div class="hint">逐辆车:选车 → 点绑定 → 弹窗里选 CADC 开头的传感器 → 转动测试看曲线。采集时按第 2 步选的车自动连对应传感器,连错车的曲线对不上就能发现。</div>
+  <div class="hint">开场流程:逐辆车 选车 → 绑定 → 转动测试验一下,10 辆绑完(标题显示 n/10)全天不用再动。采集时只需第 2 步选车,页面自动连那辆车的传感器。<b>每台手机都要这样绑一遍自己的 10 辆</b>。</div>
 </div>
 
 <!-- 2 本次骑行打标 -->
@@ -288,6 +288,9 @@ function renderBindList(){
       '</div>';
   });
   host.innerHTML=h;
+  /* 绑定进度:标题显示 n/10 */
+  var n=0;CARS.forEach(function(c){if(bindMap[c[0]])n++});
+  $('bindProg').textContent=n>=CARS.length?'✔ 全部 '+n+'/'+CARS.length+' 已绑定,可开始采集':'已绑 '+n+'/'+CARS.length+' · 逐辆:选车→绑定→转动测试';
   host.querySelectorAll('button[data-delcar]').forEach(function(btn){
     btn.addEventListener('click',function(){
       var ck=btn.getAttribute('data-delcar');
@@ -383,6 +386,11 @@ function reconnect(){
 }
 /* CSC Measurement 解析: flags1 + [wheel:4+2] + [crank:2+2] */
 function onCsc(e){
+  /* 设备过滤:只处理当前连接设备的事件——防止历史残留订阅/多设备串流混入数据 */
+  try{
+    var srcDevice=e.target&&e.target.service&&e.target.service.device?e.target.service.device:null;
+    if(srcDevice&&device&&srcDevice.id!==device.id)return;   /* 非当前设备的包,丢弃 */
+  }catch(_e){}
   var dv=e.target.value;
   if(dv.byteLength<1)return;
   var flags=dv.getUint8(0),off=1;
@@ -394,7 +402,7 @@ function onCsc(e){
   if(flags&0x02&&dv.byteLength>=off+4){ // crank revolution data present
     var cRev=dv.getUint16(off,true);off+=2;
     var cTs=dv.getUint16(off,true);
-    if(recording&&sess)sess.events.push({t:Date.now(),type:'crank',rev:cRev,sts:cTs});
+    if(recording&&sess)sess.events.push({t:Date.now(),type:'crank',rev:cRev,sts:cTs,dev:device?String(device.id).slice(-8):''});
     /* 实时 RPM 显示(差分,处理 65536 回绕) */
     if(lastCrank.rev>=0){
       var dRev=(cRev-lastCrank.rev+65536)%65536;
